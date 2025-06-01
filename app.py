@@ -74,10 +74,10 @@ def paginate(df, page):
     return df.iloc[start_row:end_row]
 
 # Display all current products with pagination
-num_pages = (len(df) // rows_per_page) + (1 if len(df) % rows_per_page > 0 else 0)
-page_all = st.selectbox(f"Select Page for All Products (Total Pages: {num_pages})", range(1, num_pages + 1))
+num_pages_all = (len(df) // rows_per_page) + (1 if len(df) % rows_per_page > 0 else 0)
+page_all = st.selectbox(f"Select Page for All Products (Total Pages: {num_pages_all})", range(1, num_pages_all + 1))
 
-st.subheader(f"📋 All Products ({len(df)}) - Page {page_all} of {num_pages}")
+st.subheader(f"📋 All Products ({len(df)}) - Page {page_all} of {num_pages_all}")
 st.write(
     paginate(df[['Title', 'SKU', 'Sale_Price', 'Regular_Price', 'Availability', 'Product Link']].rename(columns={'Sale_Price':'Sale Price', 'Regular_Price':'Regular Price'}).sort_values(by='Title'), page_all)
     .to_html(escape=False, index=False),
@@ -95,18 +95,20 @@ else:
 
 # Prepare for merging and comparison
 if show_price_changes:
-    needed_cols = {'Link', 'Sale_Price', 'Regular_Price'}
+    needed_cols = {'Link', 'Sale_Price', 'Regular_Price', 'Title'}
     if needed_cols.issubset(prev_df.columns):
         prev_prices = prev_df[list(needed_cols)]
     else:
         prev_prices = prev_df[['Link']].copy()
         prev_prices['Sale_Price'] = ""
         prev_prices['Regular_Price'] = ""
+        prev_prices['Title'] = ""
     merged = pd.merge(df, prev_prices, on='Link', how='left', suffixes=('', '_old'))
 else:
     merged = df.copy()
     merged['Sale_Price_old'] = ""
     merged['Regular_Price_old'] = ""
+    merged['Title_old'] = ""
 
 def safe_float(p):
     try:
@@ -139,14 +141,20 @@ merged['Price Changes'] = merged.apply(format_price_changes, axis=1)
 merged['Product Link'] = merged['Link'].apply(make_clickable)
 
 # Pagination for Products with Price Changes
-page_changes = st.selectbox(f"Select Page for Products with Price Changes (Total Pages: {num_pages})", range(1, num_pages + 1))
+num_pages_changes = (len(merged) // rows_per_page) + (1 if len(merged) % rows_per_page > 0 else 0)
+page_changes = st.selectbox(f"Select Page for Products with Price Changes (Total Pages: {num_pages_changes})", range(1, num_pages_changes + 1))
 
-st.subheader(f"📦 Products with Price Changes - Page {page_changes} of {num_pages}")
+st.subheader(f"📦 Products with Price Changes - Page {page_changes} of {num_pages_changes}")
+filtered_changes = merged[merged['Price Changes'] != "-"]
 st.write(
-    paginate(merged[['Title', 'SKU', 'Price_Display', 'Price Changes', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_changes)
+    paginate(filtered_changes[['Title', 'SKU', 'Price_Display', 'Price Changes', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_changes)
     .to_html(escape=False, index=False),
     unsafe_allow_html=True
 )
+
+# Count the number of price changes
+price_changes_count = len(filtered_changes)
+st.write(f"**Total Price Changes Found: {price_changes_count}**")
 
 # Detect new products
 if not prev_df.empty and 'Link' in prev_df.columns:
@@ -156,14 +164,18 @@ else:
     new_products = merged.copy()
 
 # Pagination for New Products
-page_new = st.selectbox(f"Select Page for New Products (Total Pages: {num_pages})", range(1, num_pages + 1))
+num_pages_new = (len(new_products) // rows_per_page) + (1 if len(new_products) % rows_per_page > 0 else 0)
+page_new = st.selectbox(f"Select Page for New Products (Total Pages: {num_pages_new})", range(1, num_pages_new + 1))
 
-st.subheader(f"🆕 New Products - Page {page_new} of {num_pages}")
+st.subheader(f"🆕 New Products - Page {page_new} of {num_pages_new}")
 st.write(
     paginate(new_products[['Title', 'SKU', 'Price_Display', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_new)
     .to_html(escape=False, index=False),
     unsafe_allow_html=True
 )
+
+# Count the number of new products
+st.write(f"**Total New Products Found: {len(new_products)}**")
 
 if st.button("📥 Save current data for next comparison"):
     df[['Link', 'Sale_Price', 'Regular_Price']].to_csv(PREV_CSV_FILENAME, index=False)
