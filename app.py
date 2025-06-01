@@ -65,12 +65,21 @@ for col in ['Sale_Price', 'Regular_Price']:
 
 df['Product Link'] = df['Link'].apply(make_clickable)
 
-# Display all current products
-st.subheader(f"📋 All Products ({len(df)})")
+# Pagination setup for all tables
+rows_per_page = 20  # Number of rows per page
+
+def paginate(df, page):
+    start_row = (page - 1) * rows_per_page
+    end_row = start_row + rows_per_page
+    return df.iloc[start_row:end_row]
+
+# Display all current products with pagination
+num_pages = (len(df) // rows_per_page) + (1 if len(df) % rows_per_page > 0 else 0)
+page_all = st.selectbox(f"Select Page for All Products (Total Pages: {num_pages})", range(1, num_pages + 1))
+
+st.subheader(f"📋 All Products ({len(df)}) - Page {page_all} of {num_pages}")
 st.write(
-    df[['Title', 'SKU', 'Sale_Price', 'Regular_Price', 'Availability', 'Product Link']]
-    .rename(columns={'Sale_Price':'Sale Price', 'Regular_Price':'Regular Price'})
-    .sort_values(by='Title')
+    paginate(df[['Title', 'SKU', 'Sale_Price', 'Regular_Price', 'Availability', 'Product Link']].rename(columns={'Sale_Price':'Sale Price', 'Regular_Price':'Regular Price'}).sort_values(by='Title'), page_all)
     .to_html(escape=False, index=False),
     unsafe_allow_html=True
 )
@@ -129,50 +138,15 @@ merged['Price_Display'] = merged.apply(format_prices, axis=1)
 merged['Price Changes'] = merged.apply(format_price_changes, axis=1)
 merged['Product Link'] = merged['Link'].apply(make_clickable)
 
-st.sidebar.header("Filters")
-keyword = st.sidebar.text_input("Search Title Keyword")
-availability_filter = st.sidebar.selectbox("Availability", options=["All", "Available", "Sold Out", "Unknown"])
-min_price = st.sidebar.number_input("Min Sale Price", min_value=0.0, value=0.0, step=1.0)
-max_price = st.sidebar.number_input("Max Sale Price", min_value=0.0, value=100000.0, step=1.0)
+# Pagination for Products with Price Changes
+page_changes = st.selectbox(f"Select Page for Products with Price Changes (Total Pages: {num_pages})", range(1, num_pages + 1))
 
-def price_to_float(p):
-    if not p or pd.isna(p):
-        return 0.0
-    try:
-        return float(str(p).replace('$','').replace('₹','').replace(',','').strip())
-    except:
-        return 0.0
-
-merged['Sale_Price_num'] = merged['Sale_Price'].apply(price_to_float)
-
-if show_price_changes:
-    # Filter changed prices and apply sidebar filters
-    changed = merged[merged['Price Changes'] != "-"]
-    filtered = changed[
-        (changed['Sale_Price_num'] >= min_price) & (changed['Sale_Price_num'] <= max_price)
-    ]
-
-    if keyword:
-        filtered = filtered[filtered['Title'].str.contains(keyword, case=False, na=False)]
-
-    if availability_filter != "All" and 'Availability' in merged.columns:
-        filtered = filtered[filtered['Availability'] == availability_filter]
-
-    # Show price changed products
-    st.subheader(f"📦 Products with Price Changes ({len(filtered)})")
-    if not filtered.empty:
-        st.write(
-            filtered[['Title', 'SKU', 'Price_Display', 'Price Changes', 'Availability', 'Product Link']]
-            .rename(columns={'Price_Display': 'Price'})
-            .sort_values(by='Title')
-            .to_html(escape=False, index=False),
-            unsafe_allow_html=True
-        )
-    else:
-        st.info("No products have changed prices.")
-else:
-    st.subheader("📦 Products with Price Changes")
-    st.info("Price change comparison unavailable until baseline data is saved.")
+st.subheader(f"📦 Products with Price Changes - Page {page_changes} of {num_pages}")
+st.write(
+    paginate(merged[['Title', 'SKU', 'Price_Display', 'Price Changes', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_changes)
+    .to_html(escape=False, index=False),
+    unsafe_allow_html=True
+)
 
 # Detect new products
 if not prev_df.empty and 'Link' in prev_df.columns:
@@ -181,18 +155,15 @@ if not prev_df.empty and 'Link' in prev_df.columns:
 else:
     new_products = merged.copy()
 
-# Show new products below
-st.subheader(f"🆕 New Products ({len(new_products)})")
-if not new_products.empty:
-    st.write(
-        new_products[['Title', 'SKU', 'Price_Display', 'Availability', 'Product Link']]
-        .rename(columns={'Price_Display': 'Price'})
-        .sort_values(by='Title')
-        .to_html(escape=False, index=False),
-        unsafe_allow_html=True
-    )
-else:
-    st.info("No new products found.")
+# Pagination for New Products
+page_new = st.selectbox(f"Select Page for New Products (Total Pages: {num_pages})", range(1, num_pages + 1))
+
+st.subheader(f"🆕 New Products - Page {page_new} of {num_pages}")
+st.write(
+    paginate(new_products[['Title', 'SKU', 'Price_Display', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_new)
+    .to_html(escape=False, index=False),
+    unsafe_allow_html=True
+)
 
 if st.button("📥 Save current data for next comparison"):
     df[['Link', 'Sale_Price', 'Regular_Price']].to_csv(PREV_CSV_FILENAME, index=False)
