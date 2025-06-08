@@ -14,7 +14,15 @@ import logging
 # ---------------------------
 BASE_URL = "https://nidhiratna.com"
 MAIN_SITEMAP_URL = f"{BASE_URL}/sitemap.xml"
-HEADERS = {'User-Agent': 'Mozilla/5.0'}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/114.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Referer": BASE_URL
+}
+
 CSV_FILENAME = "nidhi_prices.csv"
 # PREV_CSV_FILENAME removed from saving here on purpose
 MAX_RETRIES = 3

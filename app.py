@@ -10,6 +10,14 @@ st.set_page_config(page_title="Nidhiratna Product Tracker", layout="wide")
 
 st.title("🛍️ Nidhiratna Product Tracker Dashboard")
 
+# Define pagination rows per page
+rows_per_page = 20  # Number of rows per page
+
+def paginate(df, page):
+    start_row = (page - 1) * rows_per_page
+    end_row = start_row + rows_per_page
+    return df.iloc[start_row:end_row]
+
 if st.button("🔄 Run Scraper and Refresh Data"):
     with st.spinner("Running scraper..."):
         result = subprocess.run(["python", "scraper.py"], capture_output=True, text=True)
@@ -65,15 +73,65 @@ for col in ['Sale_Price', 'Regular_Price']:
 
 df['Product Link'] = df['Link'].apply(make_clickable)
 
+# ---------------------------
+# Track if product is Sold Out from last scrape
+# ---------------------------
+
+if not prev_df.empty and 'Link' in prev_df.columns:
+    prev_df['Availability'] = prev_df['Availability'].fillna('')
+
+    # Merge current df with previous data
+    merged = pd.merge(df, prev_df[['Link', 'Availability']], on='Link', how='left', suffixes=('', '_old'))
+
+    # Step 1: Track Sold-Out changes (if product changed to Sold Out)
+    merged['Sold_Out_Change'] = merged.apply(
+        lambda row: "Sold Out" if row['Availability_old'] != "Sold Out" and row['Availability'] == "Sold Out" else "",
+        axis=1
+    )
+
+    # Step 2: Create Availability Change column to display Sold-Out transition
+    merged['Availability_Change'] = merged.apply(
+        lambda row: f"❌ {row['Title']} is now Sold Out!" if row['Sold_Out_Change'] else "",
+        axis=1
+    )
+else:
+    merged = df.copy()
+    merged['Availability_Change'] = ""
+
+# ---------------------------
+# Display Sold-Out Products
+# ---------------------------
+sold_out_products = merged[merged['Sold_Out_Change'] != ""]
+
+# If there are no sold-out products, set the number of pages to 1 and default to page 1
+num_pages_sold_out = (len(sold_out_products) // rows_per_page) + (1 if len(sold_out_products) % rows_per_page > 0 else 0)
+
+# If there are sold-out products, enable pagination
+if num_pages_sold_out > 0:
+    page_sold_out = st.selectbox(f"Select Page for Products that Went Sold Out (Total Pages: {num_pages_sold_out})", range(1, num_pages_sold_out + 1))
+else:
+    page_sold_out = 1  # Set default to 1 if no sold-out products are available
+    st.write("No products have gone sold out since the last scrape.")
+
+# Display sold-out products (if any)
+if num_pages_sold_out > 0:
+    st.subheader(f"📉 Products that Went Sold Out - Page {page_sold_out} of {num_pages_sold_out}")
+    st.write(
+        paginate(sold_out_products[['Title', 'SKU', 'Availability_Change', 'Product Link']].rename(columns={'Availability_Change': 'Availability Status'}), page_sold_out)
+        .to_html(escape=False, index=False),
+        unsafe_allow_html=True
+    )
+else:
+    st.subheader("📉 No Sold Out Products Found")
+    st.write("There are no products that have gone sold out since the last scrape.")
+
+# Count sold-out products
+sold_out_count = len(sold_out_products)
+st.write(f"**Total Sold Out Products: {sold_out_count}**")
+
+# ---------------------------
 # Pagination setup for all tables
-rows_per_page = 20  # Number of rows per page
-
-def paginate(df, page):
-    start_row = (page - 1) * rows_per_page
-    end_row = start_row + rows_per_page
-    return df.iloc[start_row:end_row]
-
-# Display all current products with pagination
+# ---------------------------
 num_pages_all = (len(df) // rows_per_page) + (1 if len(df) % rows_per_page > 0 else 0)
 page_all = st.selectbox(f"Select Page for All Products (Total Pages: {num_pages_all})", range(1, num_pages_all + 1))
 
@@ -163,15 +221,23 @@ if not prev_df.empty and 'Link' in prev_df.columns:
 else:
     new_products = merged.copy()
 
-# Pagination for New Products
+# Handle pagination for New Products
 num_pages_new = (len(new_products) // rows_per_page) + (1 if len(new_products) % rows_per_page > 0 else 0)
-page_new = st.selectbox(f"Select Page for New Products (Total Pages: {num_pages_new})", range(1, num_pages_new + 1))
 
-st.subheader(f"🆕 New Products - Page {page_new} of {num_pages_new}")
-st.write(
-    paginate(new_products[['Title', 'SKU', 'Price_Display', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_new)
-    .to_html(escape=False, index=False),
-    unsafe_allow_html=True
+# If there are new products, enable pagination
+if num_pages_new > 0:
+    page_new = st.selectbox(f"Select Page for New Products (Total Pages: {num_pages_new})", range(1, num_pages_new + 1))
+else:
+    page_new = 1
+    st.write("No new products found.")
+
+# Display new products (if any)
+if num_pages_new > 0:
+    st.subheader(f"🆕 New Products - Page {page_new} of {num_pages_new}")
+    st.write(
+        paginate(new_products[['Title', 'SKU', 'Price_Display', 'Availability', 'Product Link']].rename(columns={'Price_Display': 'Price'}), page_new)
+        .to_html(escape=False, index=False),
+        unsafe_allow_html=True
 )
 
 # Count the number of new products
